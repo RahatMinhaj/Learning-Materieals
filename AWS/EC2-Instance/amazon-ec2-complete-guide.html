@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Amazon EC2 — Practical Guide</title>
+  <style>
+    :root{--ink:#172033;--muted:#526070;--blue:#1769aa;--light:#eef6fc;--line:#d8e1ea;--code:#17202b;--accent:#f59e0b}
+    *{box-sizing:border-box} body{margin:0;color:var(--ink);font:16px/1.65 system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:#f5f7fa}
+    .page{max-width:980px;margin:auto;background:#fff;min-height:100vh;padding:52px 72px} h1,h2,h3{line-height:1.2;color:#102a43} h1{font-size:38px;margin:0 0 10px} h2{font-size:27px;border-bottom:2px solid var(--line);padding-bottom:8px;margin-top:48px} h3{font-size:20px;margin-top:30px} p{margin:10px 0} .subtitle{color:var(--muted);font-size:19px}.note,.warning{padding:16px 18px;border-left:5px solid var(--blue);background:var(--light);margin:20px 0}.warning{border-color:var(--accent);background:#fff8e7}.toc{background:#f7fafc;border:1px solid var(--line);padding:20px 28px;margin:28px 0}.toc a{color:var(--blue);text-decoration:none}.toc li{margin:4px 0} table{border-collapse:collapse;width:100%;margin:16px 0;font-size:15px}th,td{border:1px solid var(--line);padding:9px 11px;text-align:left;vertical-align:top}th{background:#edf3f8}pre{background:var(--code);color:#e6edf3;border-radius:6px;padding:16px;overflow:auto;line-height:1.45}code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.92em}p code,li code,td code{background:#eef2f5;padding:2px 5px;border-radius:3px}.diagram{background:#fbfcfe;border:1px solid var(--line);padding:18px;text-align:center;margin:18px 0;overflow:auto}.diagram pre{display:inline-block;text-align:left;background:transparent;color:#183b56;margin:0;padding:0}.checklist{list-style:none;padding:0}.checklist li:before{content:'☐ ';color:var(--blue);font-weight:bold}@media print{body{background:#fff}.page{padding:20px;max-width:none}h2{break-before:page}pre{white-space:pre-wrap}.toc{break-after:page}}@media(max-width:700px){.page{padding:28px 20px}h1{font-size:30px}}
+  </style>
+</head>
+<body>
+<main class="page">
+  <header>
+    <h1>Amazon EC2</h1>
+    <p class="subtitle">A practical guide to instances, networking, security, SSH, storage, IAM, deployment, and troubleshooting</p>
+    <p><strong>Purpose:</strong> Use this document as a clear reference when creating and operating Linux EC2 servers.</p>
+  </header>
+
+  <nav class="toc"><strong>Contents</strong><ol>
+    <li><a href="#overview">What EC2 is</a></li><li><a href="#architecture">Core architecture</a></li><li><a href="#types">Instance types and pricing</a></li><li><a href="#launch">Launching an instance</a></li><li><a href="#network">VPC, subnets, and IP addresses</a></li><li><a href="#security">Security groups and NACLs</a></li><li><a href="#ssh">SSH and Session Manager</a></li><li><a href="#ports">Ports and port forwarding</a></li><li><a href="#iam">IAM roles</a></li><li><a href="#storage">Storage</a></li><li><a href="#demo">Web-server demo</a></li><li><a href="#production">Production design</a></li><li><a href="#operations">Monitoring, backup, and troubleshooting</a></li><li><a href="#checklist">Final checklist</a></li>
+  </ol></nav>
+
+  <h2 id="overview">1. What is EC2?</h2>
+  <p>Amazon Elastic Compute Cloud (EC2) provides virtual servers in AWS. An instance is a server on which you choose the operating system, CPU, memory, storage, network, security rules, and permissions.</p>
+  <div class="note"><strong>Simple mental model:</strong> EC2 is the server; the VPC is the network; security groups are the firewall; IAM roles provide AWS permissions; EBS is the disk; CloudWatch monitors the server.</div>
+
+  <h2 id="architecture">2. Core architecture</h2>
+  <div class="diagram"><pre>User
+  |
+  v
+Route 53 / Load Balancer
+  |
+  v
+Public subnet
+  |
+  v
+Private EC2 application instances
+  |
+  v
+Private database</pre></div>
+  <table><tr><th>Component</th><th>Purpose</th></tr><tr><td>Region</td><td>Geographic AWS location, such as <code>us-east-1</code>.</td></tr><tr><td>Availability Zone</td><td>Isolated data center inside a Region. Use more than one for availability.</td></tr><tr><td>AMI</td><td>Template containing an operating system and optional software.</td></tr><tr><td>VPC</td><td>Private network containing subnets, routes, and network controls.</td></tr><tr><td>Subnet</td><td>IP range inside a VPC; it is public or private according to its routes.</td></tr><tr><td>Security group</td><td>Stateful firewall attached to the instance network interface.</td></tr><tr><td>IAM role</td><td>Temporary AWS permissions available to applications on the instance.</td></tr></table>
+
+  <h2 id="types">3. Instance types and pricing</h2>
+  <p>An instance type determines vCPUs, memory, network performance, EBS bandwidth, and sometimes GPUs or local disks.</p>
+  <table><tr><th>Family</th><th>Use</th><th>Examples</th></tr><tr><td>General purpose</td><td>Balanced CPU and memory for web servers and APIs.</td><td><code>t3</code>, <code>t4g</code>, <code>m7i</code></td></tr><tr><td>Burstable</td><td>Low average CPU with occasional bursts; uses CPU credits.</td><td><code>t3.micro</code>, <code>t4g.small</code></td></tr><tr><td>Compute optimized</td><td>CPU-heavy APIs, encoding, batch jobs.</td><td><code>c7i</code>, <code>c7g</code></td></tr><tr><td>Memory optimized</td><td>In-memory databases, caches, analytics.</td><td><code>r7i</code>, <code>x2idn</code></td></tr><tr><td>Storage optimized</td><td>High local storage throughput and I/O.</td><td><code>i4i</code>, <code>d3</code></td></tr><tr><td>Accelerated</td><td>GPU, machine learning, rendering, specialized processing.</td><td><code>g</code>, <code>p</code>, <code>inf</code>, <code>trn</code></td></tr></table>
+  <p>Common sizes progress from <code>nano</code>, <code>micro</code>, <code>small</code>, <code>medium</code>, <code>large</code>, and <code>xlarge</code> to larger multiples.</p>
+  <table><tr><th>Pricing option</th><th>When to use it</th></tr><tr><td>On-Demand</td><td>Flexible or short-lived workloads without commitment.</td></tr><tr><td>Reserved Instances / Savings Plans</td><td>Predictable workloads running for a long period.</td></tr><tr><td>Spot</td><td>Interruptible, fault-tolerant jobs such as batch processing.</td></tr></table>
+  <div class="warning"><strong>Cost reminder:</strong> Also budget for EBS, snapshots, public IPv4 addresses, NAT Gateway, load balancers, data transfer, CloudWatch, and software licenses.</div>
+
+  <h2 id="launch">4. Launching an instance</h2>
+  <p>Choose the AMI, instance type, key pair, VPC, subnet, public-IP behavior, security group, EBS volumes, IAM role, user data, and tags.</p>
+  <pre><code>Example
+AMI: Ubuntu Server LTS
+Type: t3.micro
+Subnet: public-subnet-a
+Public IP: enabled for a temporary demo
+Security group: SSH from my IP, HTTP from the Internet
+Root volume: 20 GiB gp3
+IAM role: application-role</code></pre>
+  <h3>User data</h3><p>User data runs during first boot and is useful for repeatable setup. Do not put long-term secrets in it.</p>
+  <pre><code>#!/bin/bash
+apt-get update -y
+apt-get install -y nginx
+systemctl enable --now nginx
+echo "Hello from EC2" &gt; /var/www/html/index.html</code></pre>
+  <h3>Lifecycle</h3><table><tr><th>Action</th><th>Result</th></tr><tr><td>Start</td><td>Starts a stopped instance. A normal public IP may change.</td></tr><tr><td>Stop</td><td>Stops compute; EBS data normally remains.</td></tr><tr><td>Reboot</td><td>Restarts the operating system.</td></tr><tr><td>Hibernate</td><td>Saves memory to EBS, then stops.</td></tr><tr><td>Terminate</td><td>Deletes the instance; root volume may also be deleted.</td></tr></table>
+
+  <h2 id="network">5. VPC, subnets, and IP addresses</h2>
+  <pre><code>VPC: 10.0.0.0/16
+  Public subnet:  10.0.1.0/24  -- route to Internet Gateway
+  Private subnet: 10.0.2.0/24  -- no direct inbound Internet route
+  Database subnet:10.0.3.0/24</code></pre>
+  <p>A public subnet has a route to an Internet Gateway. A private instance can make outbound connections through a NAT Gateway, but inbound Internet traffic is not directly routed to it.</p>
+  <table><tr><th>Address</th><th>Meaning</th></tr><tr><td>Private IPv4</td><td>Used inside the VPC, for example <code>10.0.2.25</code>.</td></tr><tr><td>Public IPv4</td><td>Internet address that may change after stop/start.</td></tr><tr><td>Elastic IP</td><td>Static public IPv4 address; use sparingly.</td></tr><tr><td>IPv6</td><td>Optional address family requiring IPv6 routes and firewall rules.</td></tr></table>
+
+  <h2 id="security">6. Security groups and network ACLs</h2>
+  <p>Security groups are stateful: if a connection is allowed in, its response is automatically allowed. They allow traffic; they do not provide deny rules.</p>
+  <table><tr><th>Service</th><th>Protocol / port</th><th>Recommended source</th></tr><tr><td>SSH</td><td>TCP 22</td><td>Your IP, a VPN, or a bastion security group</td></tr><tr><td>HTTP</td><td>TCP 80</td><td>Internet only when the website is public</td></tr><tr><td>HTTPS</td><td>TCP 443</td><td>Internet only when the website is public</td></tr><tr><td>Application</td><td>TCP 8080</td><td>Load balancer security group</td></tr><tr><td>PostgreSQL</td><td>TCP 5432</td><td>Application security group</td></tr></table>
+  <div class="warning">Never expose SSH or a database to <code>0.0.0.0/0</code> unless there is a specific, controlled reason. Prefer security-group references instead of fixed private IP addresses.</div>
+  <p>Network ACLs apply at the subnet level and are stateless. Return traffic must be allowed explicitly, including ephemeral ports. Use security groups as the normal instance-level control.</p>
+
+  <h2 id="ssh">7. SSH and Session Manager</h2>
+  <p>For SSH you need a running instance, a reachable address, the correct AMI username, private key, port 22 access, routes, and network ACL rules.</p>
+  <table><tr><th>AMI</th><th>Typical username</th></tr><tr><td>Amazon Linux</td><td><code>ec2-user</code></td></tr><tr><td>Ubuntu</td><td><code>ubuntu</code></td></tr><tr><td>Debian</td><td><code>admin</code> or <code>debian</code></td></tr><tr><td>CentOS</td><td><code>centos</code></td></tr></table>
+  <pre><code>chmod 400 my-key.pem
+ssh -i my-key.pem ubuntu@PUBLIC_IP</code></pre>
+  <h3>Through a bastion</h3><pre><code>ssh -i private-key.pem \
+  -J ubuntu@BASTION_PUBLIC_IP \
+  ubuntu@PRIVATE_EC2_IP</code></pre>
+  <h3>Session Manager</h3><p>Systems Manager Session Manager provides shell access without a public IP, inbound SSH, or a bastion. The instance needs SSM Agent, an IAM role containing <code>AmazonSSMManagedInstanceCore</code>, and connectivity to Systems Manager endpoints.</p>
+  <pre><code>aws ssm start-session --target i-0123456789abcdef0</code></pre>
+
+  <h2 id="ports">8. Ports and port forwarding</h2>
+  <p>Opening a port requires the application, security group, operating-system firewall, routes, and NACL to agree.</p>
+  <pre><code>sudo ss -tulpn
+sudo ss -tulpn | grep :8080
+sudo systemctl status nginx</code></pre>
+  <p>An application bound to <code>127.0.0.1</code> is local-only. To accept network traffic it normally must bind to <code>0.0.0.0</code> (and be secured appropriately).</p>
+  <h3>Local forwarding to a private database</h3><pre><code>ssh -i bastion.pem \
+  -L 15432:10.0.3.25:5432 \
+  ec2-user@BASTION_PUBLIC_IP
+
+# Connect locally
+psql -h 127.0.0.1 -p 15432 -U appuser appdb</code></pre>
+  <div class="diagram"><pre>Your computer:15432
+        |
+   encrypted SSH tunnel
+        v
+Bastion host ----&gt; Private database:5432</pre></div>
+  <h3>Session Manager forwarding</h3><pre><code>aws ssm start-session \
+  --target i-0123456789abcdef0 \
+  --document-name AWS-StartPortForwardingSession \
+  --parameters '{"portNumber":["8080"],"localPortNumber":["8080"]}'</code></pre>
+
+  <h2 id="iam">9. IAM roles</h2>
+  <p>An instance profile provides an IAM role whose temporary credentials are available to applications through instance metadata. This is safer than storing AWS access keys on the server.</p>
+  <pre><code>EC2 instance
+    |
+    v
+Instance profile -> IAM role -> Least-privilege policies -> AWS services</code></pre>
+  <p>Example policy allowing reads from one S3 bucket:</p>
+  <pre><code>{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Effect": "Allow",
+    "Action": ["s3:GetObject"],
+    "Resource": "arn:aws:s3:::example-bucket/*"
+  }]
+}</code></pre>
+  <p>Use Secrets Manager or Systems Manager Parameter Store for secrets. Require IMDSv2:</p>
+  <pre><code>aws ec2 modify-instance-metadata-options \
+  --instance-id i-0123456789abcdef0 \
+  --http-tokens required \
+  --http-endpoint enabled</code></pre>
+
+  <h2 id="storage">10. Storage</h2>
+  <p>EBS is persistent block storage. Common types are <code>gp3</code> for general use, <code>io2</code> for high I/O, and <code>st1</code>/<code>sc1</code> for HDD workloads.</p>
+  <h3>Attach and mount a volume</h3><pre><code>lsblk
+sudo mkfs -t xfs /dev/nvme1n1
+sudo mkdir /data
+sudo mount /dev/nvme1n1 /data
+df -h
+sudo blkid /dev/nvme1n1</code></pre>
+  <p>Use the UUID in <code>/etc/fstab</code> for a persistent mount:</p><pre><code>UUID=your-volume-uuid /data xfs defaults,nofail 0 2</code></pre>
+  <p>EBS snapshots are point-in-time backups and can create new volumes or AMIs. Instance store is fast but ephemeral; do not use it as the only copy of important data.</p>
+
+  <h2 id="demo">11. Web-server demo</h2>
+  <ol><li>Launch Ubuntu with a public IP.</li><li>Allow TCP 22 from your IP and TCP 80 from the Internet.</li><li>Connect:</li></ol>
+  <pre><code>ssh -i my-key.pem ubuntu@PUBLIC_IP</code></pre>
+  <p>Install Nginx and create a page:</p><pre><code>sudo apt update
+sudo apt install -y nginx
+echo '&lt;h1&gt;Hello from EC2&lt;/h1&gt;' | sudo tee /var/www/html/index.html
+sudo systemctl status nginx
+curl http://localhost</code></pre>
+  <p>Open <code>http://PUBLIC_IP</code> in a browser. If local curl works but the browser does not, check the security group, route, NACL, OS firewall, and public IP.</p>
+
+  <h2 id="production">12. Production design</h2>
+  <div class="diagram"><pre>Users
+  |
+  v
+Route 53
+  |
+  v
+Application Load Balancer (public subnets)
+  |
+  +-------------------+
+  |                   |
+  v                   v
+EC2 A (private)    EC2 B (private)
+  |                   |
+  +---------+---------+
+            v
+       Database (private)</pre></div>
+  <p>Use an Auto Scaling group to maintain instances across Availability Zones. Use a launch template to define the AMI, instance type, security groups, IAM role, storage, and user data.</p>
+  <p>Typical security rules are: ALB allows 80/443 from users; EC2 allows the application port from the ALB security group; the database allows its port from the EC2 security group.</p>
+
+  <h2 id="operations">13. Monitoring, backup, and troubleshooting</h2>
+  <h3>Monitoring</h3><p>CloudWatch provides CPU, network, disk I/O, and status checks. Install the CloudWatch Agent for memory, disk-space, process, and application-log metrics. Useful alarms include high CPU, low disk space, failed status checks, and increased application errors.</p>
+  <h3>Backups</h3><p>Use automated EBS snapshots, AMIs, application-level database backups, encryption, retention rules, and restoration tests. A backup is not reliable until restoration has been tested.</p>
+  <h3>Common problems</h3><table><tr><th>Symptom</th><th>Check first</th></tr><tr><td>SSH timeout</td><td>Instance state, address, route, security group, NACL, and local network.</td></tr><tr><td>SSH permission denied</td><td>Username, private key, key permissions, and selected key pair.</td></tr><tr><td>Connection refused</td><td>Whether the service is running and listening on the expected port.</td></tr><tr><td>Works on localhost only</td><td>Application binding; change from <code>127.0.0.1</code> to an appropriate network binding.</td></tr><tr><td>Public IP changed</td><td>Use DNS, a load balancer, or an Elastic IP where truly necessary.</td></tr></table>
+
+  <h2 id="checklist">14. Final production checklist</h2>
+  <ul class="checklist"><li>Use private subnets for applications and databases where possible.</li><li>Restrict SSH or use Session Manager.</li><li>Use IAM roles instead of access keys.</li><li>Require IMDSv2.</li><li>Use least-privilege security groups and IAM policies.</li><li>Encrypt EBS volumes and backups.</li><li>Keep the operating system and packages updated.</li><li>Use HTTPS and a load balancer for public applications.</li><li>Use multiple Availability Zones and Auto Scaling for critical services.</li><li>Configure CloudWatch alarms and centralized logs.</li><li>Automate backups and test recovery.</li><li>Tag resources and review cost regularly.</li></ul>
+  <div class="note"><strong>Remember:</strong> A working EC2 service depends on five layers: compute, operating system, network, security, and storage/operations. Troubleshoot in that order when something fails.</div>
+  <footer><hr><p><small>Amazon EC2 practical reference. Verify current AWS pricing, instance availability, and service limits in the AWS documentation for your Region.</small></p></footer>
+</main>
+</body>
+</html>
