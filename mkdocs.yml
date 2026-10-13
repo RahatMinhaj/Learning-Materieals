@@ -1,0 +1,42 @@
+site_name: Learning Materials
+site_description: A navigable collection of practical study notes.
+site_url: https://rahatminhaj.github.io/Learning-Materieals/
+repo_url: https://github.com/RahatMinhaj/Learning-Materieals
+repo_name: RahatMinhaj/Learning-Materieals
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - navigation.top
+    - navigation.indexes
+    - search.highlight
+    - content.action.edit
+  palette:
+    - scheme: default
+      primary: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+
+nav:
+  - Home: index.md
+  - AWS:
+      - Overview: AWS/index.md
+      - EC2 Instance:
+          - Overview: AWS/EC2-Instance/index.md
+          - Complete Guide: AWS/EC2-Instance/amazon-ec2-complete-guide.md
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight
+  - toc:
+      permalink: true

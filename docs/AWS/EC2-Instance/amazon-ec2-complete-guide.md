@@ -342,4 +342,4 @@ Use automated EBS snapshots, AMIs, application-level database backups, encryptio
 - [ ] Automate backups and test recovery.
 - [ ] Tag resources and review cost regularly.
 
-[Back to EC2 topic index](README.md) · [Back to repository home](../../README.md)
+[Back to EC2 topic index](index.md) · [Back to site home](../../index.md)
