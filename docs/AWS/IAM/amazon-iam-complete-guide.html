@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Amazon IAM — Practical Guide</title>
+  <style>
+    :root{--ink:#172033;--muted:#526070;--blue:#1769aa;--light:#eef6fc;--line:#d8e1ea;--code:#17202b;--accent:#f59e0b}
+    *{box-sizing:border-box} body{margin:0;color:var(--ink);font:16px/1.65 system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:#f5f7fa}
+    .page{max-width:980px;margin:auto;background:#fff;min-height:100vh;padding:52px 72px} h1,h2,h3{line-height:1.2;color:#102a43} h1{font-size:38px;margin:0 0 10px} h2{font-size:27px;border-bottom:2px solid var(--line);padding-bottom:8px;margin-top:48px} h3{font-size:20px;margin-top:30px} p{margin:10px 0} .subtitle{color:var(--muted);font-size:19px}.note,.warning{padding:16px 18px;border-left:5px solid var(--blue);background:var(--light);margin:20px 0}.warning{border-color:var(--accent);background:#fff8e7}.toc{background:#f7fafc;border:1px solid var(--line);padding:20px 28px;margin:28px 0}.toc a{color:var(--blue);text-decoration:none}.toc li{margin:4px 0} table{border-collapse:collapse;width:100%;margin:16px 0;font-size:15px}th,td{border:1px solid var(--line);padding:9px 11px;text-align:left;vertical-align:top}th{background:#edf3f8}pre{background:var(--code);color:#e6edf3;border-radius:6px;padding:16px;overflow:auto;line-height:1.45}code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.92em}p code,li code,td code{background:#eef2f5;padding:2px 5px;border-radius:3px}.diagram{background:#fbfcfe;border:1px solid var(--line);padding:18px;text-align:center;margin:18px 0;overflow:auto}.diagram pre{display:inline-block;text-align:left;background:transparent;color:#183b56;margin:0;padding:0}.checklist{list-style:none;padding:0}.checklist li:before{content:'☐ ';color:var(--blue);font-weight:bold}@media print{body{background:#fff}.page{padding:20px;max-width:none}h2{break-before:page}pre{white-space:pre-wrap}.toc{break-after:page}}@media(max-width:700px){.page{padding:28px 20px}h1{font-size:30px}}
+  </style>
+</head>
+<body>
+<main class="page">
+  <header>
+    <h1>Amazon IAM</h1>
+    <p class="subtitle">A practical guide to identity, policies, roles, federation, MFA, and access security in AWS</p>
+    <p><strong>Purpose:</strong> Use this document as a clear reference when designing permissions, creating roles, and debugging access in AWS.</p>
+  </header>
+
+  <nav class="toc"><strong>Contents</strong><ol>
+    <li><a href="#overview">What IAM is</a></li><li><a href="#bigpicture">How access works</a></li><li><a href="#entities">Users, groups, roles</a></li><li><a href="#policytypes">Policy types</a></li><li><a href="#anatomy">Anatomy of a policy</a></li><li><a href="#evaluation">Policy evaluation logic</a></li><li><a href="#roles">IAM roles in depth</a></li><li><a href="#federation">Federation and Identity Center</a></li><li><a href="#mfa">MFA and access security</a></li><li><a href="#tools">CLI, simulator, Access Analyzer</a></li><li><a href="#troubleshooting">Troubleshooting AccessDenied</a></li><li><a href="#checklist">Best practices checklist</a></li>
+  </ol></nav>
+
+  <h2 id="overview">1. What is IAM?</h2>
+  <p>AWS Identity and Access Management (IAM) controls <strong>who can call AWS</strong> and <strong>what they are allowed to do</strong>. It is global (not per-region) and free to use.</p>
+  <div class="note"><strong>Mental model:</strong> IAM answers three questions for every API call: 1) Who is asking? (user, role, or AWS service) 2) What do they want to do? (action, e.g. <code>s3:GetObject</code>) 3) On which resource? (e.g. <code>arn:aws:s3:::my-bucket/*</code>). If an explicit <strong>Deny</strong> matches anywhere, the request is denied. Otherwise an explicit <strong>Allow</strong> is needed. No allow = deny by default.</div>
+  <table><tr><th>Term</th><th>Meaning</th></tr><tr><td>Principal</td><td>An identity that can make requests: IAM user, IAM role, or an AWS service.</td></tr><tr><td>Permission</td><td>One API action, such as <code>ec2:StartInstances</code>.</td></tr><tr><td>Policy</td><td>A JSON document that lists permissions (Allow/Deny on actions/resources).</td></tr><tr><td>ARN</td><td>Amazon Resource Name — unique address of a resource, e.g. <code>arn:aws:s3:::my-bucket</code>.</td></tr><tr><td>Root account</td><td>The account owner email; full access, should rarely be used.</td></tr></table>
+
+  <h2 id="bigpicture">2. How access works (the big picture)</h2>
+  <div class="diagram"><pre>Principal (user / role / service)
+        |
+        v
+Policies attached to the principal  ----+
+        |                               |
+        v                               v
+Service control policies (org)    Resource-based policies
+        |                               |
+        +---------------+---------------+
+                        v
+              Evaluation: Deny wins,
+              else Allow needed
+                        |
+                        v
+              AWS API call succeeds / fails</pre></div>
+  <table><tr><th>Style</th><th>Where the policy lives</th><th>Example</th></tr><tr><td>Identity-based</td><td>Attached to a user, group, or role</td><td>"This role may read from bucket X."</td></tr><tr><td>Resource-based</td><td>Attached to the resource itself</td><td>"Bucket X allows this account/role to write."</td></tr></table>
+  <p>Most permissions are identity-based. Resource policies are common for S3 bucket policies, Lambda function policies, KMS key policies, and cross-account access.</p>
+
+  <h2 id="entities">3. IAM entities: users, groups, roles</h2>
+  <table><tr><th>Entity</th><th>What it is</th><th>When to use</th></tr><tr><td><strong>IAM user</strong></td><td>A long-lived identity with a password (console) and/or access keys (CLI/API).</td><td>Humans that need steady access; legacy cases. Prefer roles + SSO now.</td></tr><tr><td><strong>IAM group</strong></td><td>A collection of users that share the same policies. Groups cannot be principals in policies.</td><td>Applying the same permissions to many users (e.g. <code>Developers</code>, <code>Admins</code>).</td></tr><tr><td><strong>IAM role</strong></td><td>A set of permissions that anyone/something can temporarily assume. Has a trust policy (who may assume) + permissions policy (what they can do).</td><td>EC2/Lambda service access, cross-account access, SSO/federation, switching contexts.</td></tr><tr><td><strong>Instance profile</strong></td><td>A wrapper that delivers an IAM role's credentials to an EC2 instance.</td><td>Attaching a role to EC2 (created automatically when you attach a role in the console).</td></tr></table>
+  <h3>Root user vs IAM user</h3>
+  <table><tr><th></th><th>Root user</th><th>IAM user / role</th></tr><tr><td>Identity</td><td>Account root email + password</td><td>Named identity inside the account</td></tr><tr><td>Permissions</td><td>Everything (no restrictions)</td><td>Only what policies allow</td></tr><tr><td>Recommended use</td><td>Few account-level tasks only</td><td>All daily work</td></tr><tr><td>MFA</td><td>Strongly required</td><td>Required by best practice</td></tr></table>
+  <div class="warning"><strong>Golden rule:</strong> Do not use the root account for everyday work. Do not create long-lived IAM users with access keys when a role (via IAM Identity Center) will do.</div>
+  <h3>Access methods compared</h3>
+  <table><tr><th>Method</th><th>Credential</th><th>Typical use</th></tr><tr><td>Console</td><td>Username + password (+ MFA)</td><td>Humans in the browser</td></tr><tr><td>AWS CLI / SDK</td><td>Access key ID + secret access key</td><td>Scripts, CI/CD, local dev (prefer roles)</td></tr><tr><td>Assumed role</td><td>Temporary STS credentials</td><td>EC2, Lambda, cross-account, SSO</td></tr><tr><td>IAM Identity Center</td><td>SSO portal / AWS CLI SSO</td><td>Humans, org-wide access</td></tr></table>
+
+  <h2 id="policytypes">4. Policy types</h2>
+  <table><tr><th>Policy type</th><th>Attached to</th><th>Purpose</th></tr><tr><td><strong>AWS managed policy</strong></td><td>Users, groups, roles</td><td>Ready-made policies maintained by AWS (e.g. <code>AmazonS3ReadOnlyAccess</code>). Convenient but often broad.</td></tr><tr><td><strong>Customer managed policy</strong></td><td>Users, groups, roles</td><td>Your own reusable policy; versioned, editable — preferred for production.</td></tr><tr><td><strong>Inline policy</strong></td><td>One specific user/group/role</td><td>Embedded in the entity; deleted with the entity. Use sparingly.</td></tr><tr><td><strong>Permissions boundary</strong></td><td>IAM entity</td><td>A maximum permission limit. An entity can never exceed the boundary.</td></tr><tr><td><strong>Service control policy (SCP)</strong></td><td>OU / account (AWS Organizations)</td><td>Org-wide guardrail. Does not grant permissions by itself — it filters what member accounts can ever do.</td></tr><tr><td><strong>Session policy</strong></td><td>Passed at assume-role time</td><td>Extra limit applied to the session; advanced role-assumption flows.</td></tr></table>
+  <div class="note"><strong>Note:</strong> SCPs <strong>limit</strong>, they do not <strong>grant</strong>. An identity still needs an Allow in its own policy; the SCP just removes what is outside the org guardrail.</div>
+  <pre><code>Effective permissions =
+    Identity policy  ∩  Permissions boundary  ∩  SCP  ∩  (resource policy allow)
+    ...unless an explicit Deny applies anywhere → Deny.</code></pre>
+
+  <h2 id="anatomy">5. Anatomy of a policy</h2>
+  <pre><code>{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AllowReadFromOneBucket",
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject",
+        "s3:ListBucket"
+      ],
+      "Resource": [
+        "arn:aws:s3:::example-bucket",
+        "arn:aws:s3:::example-bucket/*"
+      ],
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestedRegion": "us-east-1"
+        }
+      }
+    }
+  ]
+}</code></pre>
+  <table><tr><th>Field</th><th>Meaning</th></tr><tr><td><code>Version</code></td><td>Policy language version; use <code>"2012-10-17"</code> for all modern policies.</td></tr><tr><td><code>Statement</code></td><td>Array of permission rules.</td></tr><tr><td><code>Sid</code></td><td>Optional label to identify a statement.</td></tr><tr><td><code>Effect</code></td><td><code>Allow</code> or <code>Deny</code>.</td></tr><tr><td><code>Action</code></td><td>API actions, e.g. <code>s3:GetObject</code>, or wildcards <code>s3:*</code>.</td></tr><tr><td><code>Resource</code></td><td>Target ARNs. Use <code>*</code> for "all resources" carefully.</td></tr><tr><td><code>Condition</code></td><td>Extra tests: region, MFA, source IP, tags, time, etc.</td></tr><tr><td><code>Principal</code></td><td><strong>Only in resource-based policies</strong> — who may use the resource.</td></tr></table>
+  <h3>Action wildcards</h3>
+  <pre><code>s3:*            all S3 actions          (too broad for production)
+s3:Get*         all actions starting with Get
+s3:GetObject    one precise action      (prefer this)</code></pre>
+  <h3>Conditions you will actually use</h3>
+  <table><tr><th>Condition key</th><th>Example</th><th>Effect</th></tr><tr><td><code>aws:MultiFactorAuthPresent</code></td><td><code>"Bool": {"aws:MultiFactorAuthPresent": "true"}</code></td><td>Require MFA for the action.</td></tr><tr><td><code>aws:SourceIp</code></td><td><code>"IpAddress": {"aws:SourceIp": "203.0.113.0/24"}</code></td><td>Restrict by caller IP.</td></tr><tr><td><code>aws:RequestedRegion</code></td><td><code>"StringEquals": ...</code></td><td>Restrict to specific regions.</td></tr><tr><td><code>aws:PrincipalTag/Team</code></td><td>Tag-based access control</td><td>Allow only if the caller's role has a matching tag.</td></tr></table>
+
+  <h2 id="evaluation">6. Policy evaluation logic</h2>
+  <div class="diagram"><pre>1. Start: request is denied by default (implicit deny).
+2. Any explicit Deny anywhere (identity, resource, SCP, boundary)
+   matching the request?  ---- YES ----> DENIED (final).
+3. Any explicit Allow matching?  ------- NO ----> still denied (implicit deny).
+4. Also check permissions boundaries and SCPs:
+   the action must be allowed by identity policy
+   AND not blocked by boundary/SCP.
+5. ALLOW.</pre></div>
+  <table><tr><th>Situation</th><th>Result</th></tr><tr><td>Identity Allow + no Deny</td><td><strong>Allowed</strong></td></tr><tr><td>Identity Allow + explicit Deny on the same action</td><td><strong>Denied</strong> (Deny wins)</td></tr><tr><td>No Allow anywhere</td><td><strong>Denied</strong> (implicit deny)</td></tr><tr><td>Allow, but action outside permissions boundary</td><td><strong>Denied</strong></td></tr><tr><td>Allow, but SCP blocks the action in the org</td><td><strong>Denied</strong></td></tr><tr><td>Resource policy grants Allow to this principal</td><td><strong>Allowed</strong> (can be enough even without identity Allow)</td></tr></table>
+  <div class="warning"><strong>Tip:</strong> "Deny if not MFA" is implemented as an explicit Deny statement with a condition — explicit Deny beats any Allow.</div>
+  <p>Example — force MFA for dangerous actions:</p>
+  <pre><code>{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "DenyUnlessMFA",
+      "Effect": "Deny",
+      "Action": [
+        "iam:Delete*",
+        "iam:Create*",
+        "iam:Attach*",
+        "iam:Detach*"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "BoolIfExists": {
+          "aws:MultiFactorAuthPresent": "false"
+        }
+      }
+    }
+  ]
+}</code></pre>
+
+  <h2 id="roles">7. IAM roles in depth</h2>
+  <p>A role is the most important IAM concept in practice. It has two policies:</p>
+  <table><tr><th>Piece</th><th>Question it answers</th></tr><tr><td><strong>Trust policy</strong> (principal)</td><td>Who may assume this role? (account, user, service, external account)</td></tr><tr><td><strong>Permissions policy</strong></td><td>What can they do once assumed?</td></tr></table>
+  <div class="diagram"><pre>Caller ---- assume-role (STS) ----> Role
+                                      |
+                                      +--> Trust policy: is caller allowed in?
+                                      +--> Permissions: what actions result?
+                                      |
+                                      v
+                            Temporary credentials
+                            (AccessKey, SecretKey, SessionToken)
+                            expire (15 min – 12 hours)</pre></div>
+  <h3>Common role use cases</h3>
+  <table><tr><th>Use case</th><th>Trust policy principal</th><th>Notes</th></tr><tr><td>EC2 instance role</td><td><code>ec2.amazonaws.com</code></td><td>Delivered via instance profile; safest way for apps on EC2.</td></tr><tr><td>Lambda execution role</td><td><code>lambda.amazonaws.com</code></td><td>Permissions for logs, S3, DynamoDB, etc.</td></tr><tr><td>ECS task role</td><td><code>ecs-tasks.amazonaws.com</code></td><td>Per-task permissions, distinct from the execution role.</td></tr><tr><td>Cross-account access</td><td>The other account/role ARN</td><td>Requires a resource-based policy allowing the assume + matching identity policy.</td></tr><tr><td>Human access (SSO)</td><td>IAM Identity Center permission sets</td><td>Preferred over long-lived IAM users.</td></tr><tr><td>Automation / CI</td><td>GitHub OIDC, Jenkins, etc.</td><td>Federated assume-role; no static keys stored.</td></tr></table>
+  <h3>Example: EC2 instance role trust policy</h3>
+  <pre><code>{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": { "Service": "ec2.amazonaws.com" },
+      "Action": "sts:AssumeRole"
+    }
+  ]
+}</code></pre>
+  <h3>Example: minimal S3-read permissions policy</h3>
+  <pre><code>{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": ["s3:GetObject"],
+      "Resource": "arn:aws:s3:::example-bucket/*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": ["s3:ListBucket"],
+      "Resource": "arn:aws:s3:::example-bucket"
+    }
+  ]
+}</code></pre>
+  <div class="note"><strong>Note:</strong> <code>ListBucket</code> targets the <strong>bucket ARN</strong> (no <code>/*</code>); <code>GetObject</code> targets <strong>object ARNs</strong> (with <code>/*</code>). Mixing these up is a classic bug.</div>
+  <h3>Credentials on EC2 (instance metadata)</h3>
+  <p>Applications on EC2 retrieve temporary credentials from instance metadata. <strong>Never bake access keys into AMIs or user data.</strong></p>
+  <pre><code>EC2 instance
+    |
+    v
+Instance profile -&gt; IAM role -&gt; least-privilege policies -&gt; AWS services</code></pre>
+  <p>Require <strong>IMDSv2</strong> (session tokens; blocks simple SSRF credential theft):</p>
+  <pre><code>aws ec2 modify-instance-metadata-options \
+  --instance-id i-0123456789abcdef0 \
+  --http-tokens required \
+  --http-endpoint enabled</code></pre>
+  <h3>Cross-account access (pattern)</h3>
+  <pre><code>Account A (trusted)                    Account B (owns the role)
+Role: DataReader  &lt;--- trust ---       Trust policy: allow Account A
+Permissions: read S3 in Account B</code></pre>
+  <ol><li>In Account B, create role <code>DataReader</code> with a trust policy allowing Account A.</li><li>In Account A, the caller runs <code>sts:AssumeRole</code> on <code>arn:aws:iam::B:role/DataReader</code>.</li><li>Temporary credentials for the role are used for subsequent calls.</li></ol>
+
+  <h2 id="federation">8. Federation and IAM Identity Center</h2>
+  <p>Federation = use an external identity (company IdP, Active Directory, Google, etc.) to get AWS access without long-lived IAM users.</p>
+  <table><tr><th>Option</th><th>What it is</th><th>When</th></tr><tr><td><strong>IAM Identity Center</strong></td><td>Central portal: one login → many AWS accounts/permission sets. Integrates with IdPs (Okta, Azure AD, Google, AD).</td><td><strong>Recommended for humans in orgs.</strong></td></tr><tr><td>SAML 2.0 federation</td><td>Direct SAML integration with your IdP to assume roles.</td><td>Custom integrations; often backs Identity Center.</td></tr><tr><td>Cognito</td><td>Public user sign-in for apps (social login, user pools).</td><td>Application end-users, not AWS admin access.</td></tr><tr><td>Web identity (OIDC)</td><td>Roles trusted by an OIDC provider (e.g. GitHub Actions).</td><td>CI/CD pipelines without static keys.</td></tr></table>
+  <div class="diagram"><pre>Human -&gt; IdP (Okta/AD/Google)
+            |
+            v
+    IAM Identity Center
+            |
+            v
+    Permission set (policy) assumed into Target AWS account</pre></div>
+  <p><strong>Permission sets</strong> are templates (e.g. <code>AdministratorAccess</code>, <code>PowerUser</code>, <code>ReadOnly</code>) applied to users/groups per account.</p>
+
+  <h2 id="mfa">9. MFA and access security</h2>
+  <table><tr><th>Control</th><th>Why</th></tr><tr><td><strong>MFA on root + all IAM users</strong></td><td>Blocks password-only takeover.</td></tr><tr><td><strong>Virtual / hardware MFA</strong></td><td>Authenticator app (virtual), hardware key, or FIDO2 security key.</td></tr><tr><td><strong>No access keys for humans</strong></td><td>Humans should use Identity Center; keys are for machines and should rotate.</td></tr><tr><td><strong>Password policy</strong></td><td>Min length, complexity, expiry, no reuse.</td></tr><tr><td><strong>Condition: require MFA</strong></td><td>For sensitive actions (billing, IAM changes).</td></tr></table>
+  <h3>Setting a strong password policy (CLI sketch)</h3>
+  <pre><code>aws iam update-account-password-policy \
+  --minimum-length 14 \
+  --require-symbols \
+  --require-numbers \
+  --require-uppercase-characters \
+  --require-lowercase-characters \
+  --max-password-age 90 \
+  --password-reuse-prevention 24</code></pre>
+  <h3>Access keys hygiene</h3>
+  <table><tr><th>Do</th><th>Don't</th></tr><tr><td>One key pair per application, per environment</td><td>Share keys between apps or people</td></tr><tr><td>Rotate regularly (90 days) or use roles</td><td>Commit keys to git</td></tr><tr><td>Store in Secrets Manager / Parameter Store</td><td>Put keys in user data or AMIs</td></tr><tr><td>Delete unused keys immediately</td><td>Leave departed employees' keys active</td></tr></table>
+  <pre><code>aws iam list-access-keys --user-name my-user
+aws iam get-access-key-last-used --access-key-id AKIA...</code></pre>
+
+  <h2 id="tools">10. Tools: CLI, simulator, Access Analyzer</h2>
+  <h3>Useful IAM CLI commands</h3>
+  <pre><code># Who am I?
+aws sts get-caller-identity
+
+# List users, groups, roles, policies
+aws iam list-users
+aws iam list-groups-for-user --user-name alice
+aws iam list-attached-role-policies --role-name app-role
+aws iam list-policies --scope Local
+
+# Inline policies
+aws iam list-role-policies --role-name app-role
+aws iam get-role-policy --role-name app-role --policy-name my-inline
+
+# Attach / detach managed policy
+aws iam attach-role-policy \
+  --role-name app-role \
+  --policy-arn arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess
+aws iam detach-role-policy \
+  --role-name app-role \
+  --policy-arn arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess
+
+# Assume a role and use it
+aws sts assume-role \
+  --role-arn arn:aws:iam::123456789012:role/DataReader \
+  --role-session-name my-session</code></pre>
+  <h3>IAM policy simulator</h3>
+  <p>Web tool: <strong>IAM → Policy simulator</strong> (or <code>aws iam simulate-principal-policy</code>). Answers "would this identity be allowed to do X on resource Y?" without executing the action. Excellent for debugging before granting more permissions.</p>
+  <h3>IAM Access Analyzer</h3>
+  <ul><li>Finds <strong>external sharing</strong> (roles trust outside accounts, public S3 buckets, unrestricted KMS keys, etc.).</li><li>Can generate policies from <strong>CloudTrail activity</strong> (only actions the workload actually used).</li><li>Validates policies against IAM best practices and AWS service limits.</li></ul>
+  <p>Enable it in every region you use. Treat findings as a to-do list: every external share should be intentional.</p>
+  <h3>CloudTrail for auditing</h3>
+  <p>Every IAM API call (<code>CreateUser</code>, <code>AttachRolePolicy</code>, <code>AssumeRole</code>, …) appears in CloudTrail. Alert on:</p>
+  <ul><li>Root account usage</li><li>IAM policy/role/user changes</li><li>Failed <code>AccessDenied</code> spikes (possible probing)</li><li>New access keys created</li></ul>
+
+  <h2 id="troubleshooting">11. Troubleshooting AccessDenied</h2>
+  <table><tr><th>Symptom</th><th>Likely cause</th><th>Fix</th></tr><tr><td><code>AccessDenied</code> on S3 <code>GetObject</code></td><td>Missing object permission or wrong resource ARN (<code>/*</code> needed)</td><td>Check both bucket and object statements.</td></tr><tr><td><code>AccessDenied</code> on <code>ListBucket</code></td><td>Statement targets <code>bucket/*</code> instead of <code>bucket</code></td><td>Split List vs Get resources.</td></tr><tr><td>Role cannot be assumed</td><td>Trust policy does not include caller, or caller lacks <code>sts:AssumeRole</code></td><td>Fix trust policy + identity policy.</td></tr><tr><td>Works in console, fails in CLI</td><td>CLI uses different identity (keys vs SSO session)</td><td><code>aws sts get-caller-identity</code> first.</td></tr><tr><td>Region errors</td><td>Policy has <code>Condition</code> on region</td><td>Align <code>aws:RequestedRegion</code>.</td></tr><tr><td>EC2 app denied</td><td>Instance has no instance profile / wrong role</td><td>Attach profile; wait for credentials.</td></tr><tr><td>Works alone, fails with boundary/SCP</td><td>Action outside boundary or blocked by org SCP</td><td>Check boundary and SCPs.</td></tr><tr><td>"Still denied" after adding Allow</td><td>Explicit Deny exists elsewhere</td><td>Search all policies for <code>Deny</code> on that action.</td></tr></table>
+  <h3>Debugging order</h3>
+  <pre><code>aws sts get-caller-identity          # 1. Who am I?
+aws iam simulate-principal-policy \  # 2. Would this identity pass?
+  --policy-source-arn arn:aws:iam::123456789012:role/app-role \
+  --action-names s3:GetObject \
+  --resource-arns arn:aws:s3:::example-bucket/*</code></pre>
+  <p>Then read the error code carefully: <code>AccessDenied</code>, <code>AccessDeniedException</code>, <code>UnauthorizedOperation</code> — each points at a different layer (identity policy vs resource policy vs service auth).</p>
+
+  <h2 id="checklist">12. IAM best practices checklist</h2>
+  <ul class="checklist"><li>Never use the root account for daily work; secure it with hardware MFA and no access keys.</li><li>Enable MFA for root and every IAM user (prefer hardware/FIDO2 for root).</li><li>Prefer <strong>IAM Identity Center</strong> + roles over long-lived IAM users with access keys.</li><li>Grant least privilege: precise actions, precise resources; avoid <code>*:*</code> and <code>Resource: *</code>.</li><li>Use <strong>customer managed policies</strong> (versioned, reusable) over inline and broad AWS managed policies.</li><li>Use <strong>permissions boundaries</strong> for roles that developers create.</li><li>Use <strong>SCPs</strong> in AWS Organizations as org guardrails.</li><li>EC2/Lambda/ECS always use <strong>roles</strong>, never embedded keys.</li><li>Require <strong>IMDSv2</strong> on all EC2 instances.</li><li>Store secrets in <strong>Secrets Manager</strong> or <strong>Parameter Store (SecureString)</strong>, not in code or user data.</li><li>Rotate access keys automatically; delete unused keys and stale roles.</li><li>Enable <strong>IAM Access Analyzer</strong> in all regions; act on findings.</li><li>Enable <strong>CloudTrail</strong> and alarm on IAM changes and root usage.</li><li>Review permissions quarterly; remove unused users, roles, and policies.</li><li>Tag IAM entities (<code>Team</code>, <code>Environment</code>) for ownership and automation.</li></ul>
+  <div class="note"><strong>Remember:</strong> IAM is allow-by-default-deny. Start from zero permissions, add the minimum Allow needed, test with the Policy Simulator, and use explicit Deny + conditions for guardrails. Roles over users; temporary credentials over permanent keys.</div>
+  <footer><hr><p><small>Amazon IAM practical reference. Verify current AWS service limits, policy syntax, and IAM Identity Center features in the AWS documentation for your account.</small></p></footer>
+</main>
+</body>
+</html>

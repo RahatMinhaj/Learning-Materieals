@@ -16,10 +16,14 @@ Learning-Materieals/
 │   ├── index.md
 │   └── AWS/
 │       ├── index.md
-│       └── EC2-Instance/
+│       ├── EC2-Instance/
+│       │   ├── index.md
+│       │   ├── amazon-ec2-complete-guide.md
+│       │   └── amazon-ec2-complete-guide.html
+│       └── IAM/
 │           ├── index.md
-│           ├── amazon-ec2-complete-guide.md
-│           └── amazon-ec2-complete-guide.html
+│           ├── amazon-iam-complete-guide.md
+│           └── amazon-iam-complete-guide.html
 ├── mkdocs.yml
 ├── requirements.txt
 └── .github/workflows/deploy.yml
