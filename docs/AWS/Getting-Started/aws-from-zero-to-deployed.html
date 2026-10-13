@@ -1,0 +1,368 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AWS From Zero to Deployed — Beginner Guide</title>
+  <style>
+    :root{--ink:#172033;--muted:#526070;--blue:#1769aa;--light:#eef6fc;--line:#d8e1ea;--code:#17202b;--accent:#f59e0b}
+    *{box-sizing:border-box} body{margin:0;color:var(--ink);font:16px/1.65 system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:#f5f7fa}
+    .page{max-width:980px;margin:auto;background:#fff;min-height:100vh;padding:52px 72px} h1,h2,h3{line-height:1.2;color:#102a43} h1{font-size:38px;margin:0 0 10px} h2{font-size:27px;border-bottom:2px solid var(--line);padding-bottom:8px;margin-top:48px} h3{font-size:20px;margin-top:30px} p{margin:10px 0} .subtitle{color:var(--muted);font-size:19px}.note,.warning{padding:16px 18px;border-left:5px solid var(--blue);background:var(--light);margin:20px 0}.warning{border-color:var(--accent);background:#fff8e7}.toc{background:#f7fafc;border:1px solid var(--line);padding:20px 28px;margin:28px 0}.toc a{color:var(--blue);text-decoration:none}.toc li{margin:4px 0} table{border-collapse:collapse;width:100%;margin:16px 0;font-size:15px}th,td{border:1px solid var(--line);padding:9px 11px;text-align:left;vertical-align:top}th{background:#edf3f8}pre{background:var(--code);color:#e6edf3;border-radius:6px;padding:16px;overflow:auto;line-height:1.45}code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.92em}p code,li code,td code{background:#eef2f5;padding:2px 5px;border-radius:3px}.diagram{background:#fbfcfe;border:1px solid var(--line);padding:18px;text-align:center;margin:18px 0;overflow:auto}.diagram pre{display:inline-block;text-align:left;background:transparent;color:#183b56;margin:0;padding:0}.checklist{list-style:none;padding:0}.checklist li:before{content:'☐ ';color:var(--blue);font-weight:bold}@media print{body{background:#fff}.page{padding:20px;max-width:none}h2{break-before:page}pre{white-space:pre-wrap}.toc{break-after:page}}@media(max-width:700px){.page{padding:28px 20px}h1{font-size:30px}}
+  </style>
+</head>
+<body>
+<main class="page">
+  <header>
+    <h1>AWS From Zero to Deployed</h1>
+    <p class="subtitle">A complete beginner path: account setup, budgets, EC2, SSH from your PC, running an app, ports, and cost safety</p>
+    <p><strong>Purpose:</strong> Follow this document in order with zero prior AWS experience and end with a working web application on a public URL — without surprise bills.</p>
+  </header>
+
+  <nav class="toc"><strong>Contents</strong><ol>
+    <li><a href="#build">What you will build</a></li>
+    <li><a href="#prereq">What you need before starting</a></li>
+    <li><a href="#cloud">Cloud and AWS in plain English</a></li>
+    <li><a href="#account">Create your AWS account</a></li>
+    <li><a href="#root">Lock down the root account</a></li>
+    <li><a href="#billing">Billing and budgets (day one)</a></li>
+    <li><a href="#console">Console tour: regions, CloudShell</a></li>
+    <li><a href="#iamuser">Create your daily-use admin identity</a></li>
+    <li><a href="#cli">Install the AWS CLI on your PC</a></li>
+    <li><a href="#map">Mental map of core services</a></li>
+    <li><a href="#ec2">Launch your first EC2 instance</a></li>
+    <li><a href="#ssh">Connect from your PC with SSH</a></li>
+    <li><a href="#server">First ten minutes on the server</a></li>
+    <li><a href="#app">Run your first web application</a></li>
+    <li><a href="#ports">Open the app to the world</a></li>
+    <li><a href="#forward">Port forwarding explained</a></li>
+    <li><a href="#eip">Elastic IPs and stable addresses</a></li>
+    <li><a href="#storage">Storage and snapshots</a></li>
+    <li><a href="#monitor">Monitoring and billing checks</a></li>
+    <li><a href="#deploy">Deploying updates</a></li>
+    <li><a href="#recap">Architecture recap</a></li>
+    <li><a href="#stop">Stop vs terminate</a></li>
+    <li><a href="#cleanup">Cleanup checklist</a></li>
+    <li><a href="#errors">Troubleshooting common errors</a></li>
+    <li><a href="#costs">What is free and what is not</a></li>
+    <li><a href="#next">Where to go next</a></li>
+    <li><a href="#checklist">Final beginner checklist</a></li>
+  </ol></nav>
+
+  <h2 id="build">What you will build</h2>
+  <div class="diagram"><pre>Your laptop
+   |
+   |  1) SSH (port 22) with your private key
+   v
+EC2 instance (t2.micro, free tier)
+   |
+   |  2) runs Nginx or your app (port 80 / 8080)
+   v
+Your browser  &lt;--- http://PUBLIC_IP  ---  anyone on the Internet</pre></div>
+  <p>By the end you will have: a secured AWS account with MFA and budget alerts; AWS CLI configured on your PC; an EC2 server you can SSH into; a web app serving traffic on a public IP; and a cleanup plan so experiments do not cost money.</p>
+
+  <h2 id="prereq">1. What you need before starting</h2>
+  <table><tr><th>Item</th><th>Notes</th></tr><tr><td>Email address</td><td>Preferably one dedicated to AWS; the root account will use it.</td></tr><tr><td>Phone number</td><td>AWS sends a verification code during signup.</td></tr><tr><td>Credit or debit card</td><td>Required for identity verification. You are not charged if you stay inside the free tier and stop unused resources.</td></tr><tr><td>A PC with internet</td><td>Windows 10/11, macOS, or Linux.</td></tr><tr><td>Terminal access</td><td>PowerShell/CMD on Windows, Terminal on macOS/Linux.</td></tr><tr><td>~2 hours</td><td>Account setup + first deployment in one sitting.</td></tr></table>
+  <p>No prior cloud or Linux experience is required. Every command is provided.</p>
+
+  <h2 id="cloud">2. Cloud and AWS in plain English</h2>
+  <p>Traditionally, to run a web app you buy a server, put it in a data center, and pay for it whether you use it or not. <strong>Cloud computing</strong> means renting computers, storage, and networking over the internet, minute by minute, and paying only for what you use. <strong>Amazon Web Services (AWS)</strong> is the largest cloud provider.</p>
+  <table><tr><th>Traditional hosting</th><th>AWS cloud</th></tr><tr><td>Buy hardware weeks in advance</td><td>Server in ~2 minutes</td></tr><tr><td>Fixed monthly cost</td><td>Pay per second/hour of use</td></tr><tr><td>One data center</td><td>Regions worldwide</td></tr><tr><td>You fix broken disks</td><td>AWS manages the hardware; you manage your data and config</td></tr></table>
+  <div class="note"><strong>Mental model:</strong> AWS is a giant vending machine for infrastructure. You pick compute (EC2), storage (S3/EBS), network (VPC), and identity (IAM) — assembled by you, billed as you go.</div>
+
+  <h2 id="account">3. Create your AWS account</h2>
+  <ol><li>Open <strong>https://aws.amazon.com/free/</strong> (or aws.amazon.com → <strong>Create an AWS Account</strong>).</li><li>Enter email → verify with the code AWS sends → password (this is the <strong>root</strong> account) → account name.</li><li><strong>Contact information:</strong> Personal or Business, full name, phone, country, address.</li><li><strong>Payment information:</strong> card for verification; AWS may place a small temporary authorization hold (refunded).</li><li><strong>Identity verification:</strong> phone OTP by SMS or call.</li><li><strong>Support plan:</strong> choose <strong>Basic Support — Free</strong>.</li></ol>
+  <div class="diagram"><pre>Signup flow
+    |
+    v
+Email + password  --&gt;  Contact info  --&gt;  Card  --&gt;  Phone OTP
+                                                      |
+                                                      v
+                                            Support plan (Basic/Free)
+                                                      |
+                                                      v
+                                            Root console access</pre></div>
+  <h3>What happens next</h3>
+  <ul><li>You land in the AWS Management Console at <code>https://console.aws.amazon.com/</code>.</li><li>Your account has a unique 12-digit <strong>Account ID</strong> (top-right account menu) — used in ARNs like <code>arn:aws:iam::123456789012:role/...</code>.</li><li>New accounts typically get <strong>12 months of selected free-tier usage</strong> (e.g. 750 hours/month of <code>t2.micro</code>/<code>t3.micro</code> in most regions). Limits change — bookmark <strong>https://aws.amazon.com/free/</strong>.</li></ul>
+  <p>Store root email + password in a <strong>password manager</strong> immediately. The root user must never be used for daily work.</p>
+
+  <h2 id="root">4. Lock down the root account</h2>
+  <p>The <strong>root account</strong> = your signup email + password. It can do everything, including deleting your whole account. Secure it before creating anything.</p>
+  <h3>Enable MFA on root — today</h3>
+  <ol><li>Log in as root (account email → <strong>Root user</strong>).</li><li>Top-right account menu → <strong>Security credentials</strong>.</li><li><strong>Multi-factor authentication (MFA)</strong> → <strong>Assign MFA device</strong>.</li><li>Choose <strong>Virtual MFA device</strong> → next.</li><li>Install an authenticator app (Google Authenticator, Authy, Microsoft Authenticator).</li><li>Scan the QR code → enter two consecutive codes → <strong>Activate</strong>.</li></ol>
+  <div class="diagram"><pre>Login:  email + password  +  6-digit code from phone
+              \______________/   \___________________/
+                   something        something
+                     you know         you have</pre></div>
+  <div class="warning"><strong>Without MFA</strong>, a leaked password is game over. With MFA, an attacker needs your phone too.</div>
+  <p><strong>Root hygiene:</strong> enable MFA; do not create access keys for root; use root rarely (billing, account close, some support cases); do daily work as IAM.</p>
+
+  <h2 id="billing">5. Billing and budgets (do this on day one)</h2>
+  <p>Budgets are your safety net for the day you forget a running server. Nothing in this guide should cost real money if you stay on free-tier shapes and stop or terminate unused resources.</p>
+  <h3>Create a cost budget with alerts</h3>
+  <ol><li><strong>Billing</strong> → <strong>Budgets</strong> → <strong>Create budget</strong>.</li><li>Choose <strong>Use a template</strong> → <strong>Zero-spend budget</strong> or <strong>Custom cost budget</strong>.</li><li>Custom example: name <code>monthly-learning</code>, amount <strong>$5</strong>, alert at <strong>80%</strong> and <strong>100%</strong> to your email.</li><li>Confirm email → <strong>Create budget</strong>.</li></ol>
+  <div class="diagram"><pre>Spend $0.00          $4.00 (80%)           $5.00 (100%)
+   |--------------------|---------------------|
+   OK                 Warning email        Critical email
+                                          (stop non-free resources)</pre></div>
+  <h3>Free-tier usage alerts</h3>
+  <p><strong>Billing</strong> → <strong>Preferences</strong> → enable <strong>Receive Free Tier Usage Alerts</strong> → confirm email.</p>
+  <h3>Cost Explorer</h3>
+  <p><strong>Billing</strong> → <strong>Cost Explorer</strong> → enable if prompted. Use later to see which service drove a charge.</p>
+  <div class="warning"><strong>Budget alerts are not a hard cap.</strong> AWS does not auto-shutdown at 100% — they notify you; you still act.</div>
+  <p>The 12-month free tier starts at account creation. Build the habit: <strong>stop instances when idle</strong>.</p>
+
+  <h2 id="console">6. Console tour: regions, services, CloudShell</h2>
+  <div class="diagram"><pre>Region: us-east-1 (N. Virginia)     &lt;-- pick one and stay there while learning
+   |
+   +-- AZ: us-east-1a   (data center cluster)
+   +-- AZ: us-east-1b
+   +-- AZ: us-east-1c</pre></div>
+  <table><tr><th>Concept</th><th>Meaning</th><th>Beginner rule</th></tr><tr><td><strong>Region</strong></td><td>Geographic area (<code>us-east-1</code>, <code>eu-west-1</code>, <code>ap-southeast-1</code>).</td><td>Pick one region; keep everything there while learning.</td></tr><tr><td><strong>Availability Zone</strong></td><td>Isolated data centers inside a region.</td><td>Single-AZ is fine for learning; production uses 2+ AZs.</td></tr></table>
+  <p><strong>Region selector:</strong> top-right of the console. Resources are regional — an EC2 instance in <code>us-east-1</code> is invisible from <code>eu-west-1</code>. Global services (IAM, Route 53) appear the same from every region.</p>
+  <p><strong>Services search:</strong> top bar — type <code>EC2</code>, <code>IAM</code>, <code>S3</code>…</p>
+  <p><strong>AWS CloudShell</strong> (icon <code>&gt;_</code> in the top bar): a browser terminal with AWS CLI pre-authenticated as your current console user.</p>
+
+  <h2 id="iamuser">7. Create your daily-use admin identity</h2>
+  <p>Never work as root. Classic beginner path:</p>
+  <ol><li>Search <strong>IAM</strong> → <strong>Users</strong> → <strong>Create user</strong>.</li><li>Username: <code>admin</code>.</li><li><strong>Permissions options</strong> → <strong>Attach policies directly</strong> → check <strong><code>AdministratorAccess</code></strong>.</li><li>Create user → open it → <strong>Security credentials</strong> → <strong>Create access key</strong> → use case <strong>Command Line Interface (CLI)</strong> → <strong>Download the .csv</strong> (secret shown only once).</li><li>Also set a <strong>console password</strong> for this user and <strong>assign MFA</strong> (same as root).</li></ol>
+  <div class="diagram"><pre>Root (email + MFA)
+  |-- used rarely: billing changes, account close, some support
+  |
+  +-- IAM user: admin (AdministratorAccess + MFA + CLI access keys)
+        |-- daily console + CLI work while learning
+        |
+        +-- later: narrow policies / roles per project (see IAM guide)</pre></div>
+  <p>For org-grade access, prefer <strong>IAM Identity Center</strong> — see the <a href="../IAM/amazon-iam-complete-guide.md">IAM guide</a>.</p>
+
+  <h2 id="cli">8. Install the AWS CLI on your PC</h2>
+  <table><tr><th>OS</th><th>Method</th></tr><tr><td>Windows</td><td>Download MSI from aws.amazon.com/cli → run → reopen PowerShell.</td></tr><tr><td>macOS</td><td><code>curl "https://awscli.amazonaws.com/AWSCLIV2.pkg" -o AWSCLIV2.pkg &amp;&amp; sudo installer -pkg AWSCLIV2.pkg -target /</code> (or <code>brew install awscli</code>).</td></tr><tr><td>Ubuntu/Debian</td><td><code>sudo apt update &amp;&amp; sudo apt install -y awscli</code> (or official .zip from AWS docs).</td></tr><tr><td>Amazon Linux</td><td><code>sudo yum install -y awscli</code>.</td></tr></table>
+  <pre><code>aws --version
+
+aws configure
+# AWS Access Key ID:     AKIA...   (from the CSV)
+# AWS Secret Access Key: wJal...   (hidden while typing)
+# Default region name:   us-east-1
+# Default output format: json
+
+aws sts get-caller-identity
+# Arn should be arn:aws:iam::123456789012:user/admin  (NOT root)</code></pre>
+  <p>Keys are stored in <code>~/.aws/credentials</code> — protect this file; never commit it.</p>
+
+  <h2 id="map">9. Mental map of core services</h2>
+  <table><tr><th>Service</th><th>What it does</th><th>Used in this guide?</th></tr><tr><td><strong>IAM</strong></td><td>Identities and permissions</td><td>Yes (setup)</td></tr><tr><td><strong>EC2</strong></td><td>Virtual servers</td><td>Yes (the app host)</td></tr><tr><td><strong>VPC</strong></td><td>Private network (defaults are fine)</td><td>Yes (defaults)</td></tr><tr><td><strong>Security Groups</strong></td><td>Virtual firewall around instances</td><td>Yes (SSH + HTTP)</td></tr><tr><td><strong>EBS</strong></td><td>Disk volumes for EC2</td><td>Yes (root volume)</td></tr><tr><td><strong>CloudWatch</strong></td><td>Metrics, logs, alarms</td><td>Glance</td></tr><tr><td><strong>S3 / RDS / Route 53 / ALB</strong></td><td>Storage / databases / DNS / load balancer</td><td>Not yet</td></tr></table>
+
+  <h2 id="ec2">10. Launch your first EC2 instance</h2>
+  <p>EC2 Dashboard → <strong>Launch instance</strong>. Region top-right must be your chosen one.</p>
+  <table><tr><th>Setting</th><th>First-time choice</th><th>Why</th></tr><tr><td>Name</td><td><code>first-server</code></td><td>Easy to spot in the list.</td></tr><tr><td>AMI</td><td><strong>Amazon Linux 2023</strong> or <strong>Ubuntu 24.04 LTS</strong></td><td>Free-tier eligible.</td></tr><tr><td>Instance type</td><td><code>t3.micro</code> or <code>t2.micro</code></td><td>Free-tier (750 hrs/month, 12 months — verify current terms).</td></tr><tr><td>Key pair</td><td>Create new, download <code>.pem</code></td><td>Your SSH password file. Do not lose it.</td></tr><tr><td>Network</td><td>Default VPC + public IP enabled</td><td>Works out of the box with internet access.</td></tr><tr><td>Storage</td><td>8–30 GiB <code>gp3</code></td><td>Free tier includes up to 30 GB EBS.</td></tr><tr><td>Security group</td><td>SSH (22) from <strong>My IP</strong> only</td><td>Safer than 0.0.0.0/0.</td></tr></table>
+  <h3>Key pair rules</h3>
+  <table><tr><th>Rule</th><th>Reason</th></tr><tr><td>The <code>.pem</code> is the only way in (without password)</td><td>Lose it → simplest fix is rebuild.</td></tr><tr><td>Never commit <code>.pem</code> to git</td><td>Keys in repos get scraped.</td></tr><tr><td>Permissions must be private</td><td><code>chmod 400</code> on macOS/Linux.</td></tr></table>
+  <div class="diagram"><pre>Click "Launch"
+     |
+     +--&gt; EC2 boots your AMI in the chosen AZ
+     +--&gt; AWS attaches an EBS root volume
+     +--&gt; Places it in your subnet (private IP)
+     +--&gt; With auto-assign public IP: maps a public IPv4
+     +--&gt; Security group: only port 22 from your IP so far
+     |
+     v
+Instance state: running    Status checks: 2/2 passed  (wait ~1–3 min)</pre></div>
+
+  <h2 id="ssh">11. Connect from your PC with SSH</h2>
+  <p>You need five things:</p>
+  <ol><li>Instance running + 2/2 status checks</li><li>Reachable public IPv4 (console → select instance)</li><li>Correct username for the AMI</li><li>Private key matching the key pair</li><li>Security group allows TCP 22 from your current IP</li></ol>
+  <table><tr><th>AMI</th><th>Username</th></tr><tr><td>Amazon Linux 2023 / AL2</td><td><code>ec2-user</code></td></tr><tr><td>Ubuntu</td><td><code>ubuntu</code></td></tr><tr><td>Debian</td><td><code>admin</code></td></tr><tr><td>RHEL / Fedora / SUSE</td><td><code>ec2-user</code></td></tr></table>
+  <h3>macOS / Linux</h3>
+  <pre><code>mkdir -p ~/aws-keys
+mv ~/Downloads/first-server-key.pem ~/aws-keys/
+chmod 400 ~/aws-keys/first-server-key.pem
+
+ssh -i ~/aws-keys/first-server-key.pem ubuntu@3.94.12.34</code></pre>
+  <p>First connection: type <code>yes</code> to trust the host fingerprint.</p>
+  <h3>Windows (OpenSSH built into 10/11)</h3>
+  <pre><code>mkdir C:\aws-keys
+move $env:USERPROFILE\Downloads\first-server-key.pem C:\aws-keys\
+icacls C:\aws-keys\first-server-key.pem /inheritance:r /grant:r "$env:USERNAME:R"
+
+ssh -i C:\aws-keys\first-server-key.pem ubuntu@3.94.12.34</code></pre>
+  <p>PuTTY alternative: convert <code>.pem</code> → <code>.ppk</code> with PuTTYgen.</p>
+  <p>Success looks like: <code>ubuntu@ip-10-0-1-45:~$</code> — the <code>10.x</code> host is the private IP (normal).</p>
+
+  <h2 id="server">12. First ten minutes on the server</h2>
+  <p>Commands assume <strong>Ubuntu</strong>; on Amazon Linux use <code>sudo dnf update -y</code> instead.</p>
+  <pre><code>whoami
+hostname
+
+sudo apt update
+sudo apt upgrade -y
+sudo apt install -y curl git jq ufw
+
+# Optional non-root app user
+sudo adduser deploy
+sudo usermod -aG sudo deploy
+echo 'deploy ALL=(ALL) NOPASSWD:ALL' | sudo tee /etc/sudoers.d/deploy
+sudo chmod 440 /etc/sudoers.d/deploy</code></pre>
+  <h3>UFW note</h3>
+  <p>AWS security groups are your primary firewall for this guide. If you enable UFW, allow SSH <em>first</em> or you will lock yourself out:</p>
+  <pre><code>sudo ufw allow OpenSSH
+sudo ufw allow 80/tcp
+sudo ufw --force enable
+sudo ufw status</code></pre>
+
+  <h2 id="app">13. Run your first web application</h2>
+  <h3>Path A — Nginx static page</h3>
+  <pre><code>sudo apt install -y nginx
+sudo systemctl enable --now nginx
+
+echo '&lt;h1&gt;Hello from my first AWS server&lt;/h1&gt;' \
+  | sudo tee /var/www/html/index.html
+
+curl -I http://localhost
+# HTTP/1.1 200 OK</code></pre>
+  <h3>Path B — Node.js app on port 8080</h3>
+  <pre><code>curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt install -y nodejs
+
+mkdir -p ~/myapp &amp;&amp; cd ~/myapp
+cat &gt; server.js &lt;&lt;'EOF'
+const http = require('http');
+const port = process.env.PORT || 8080;
+const server = http.createServer((req, res) =&gt; {
+  res.writeHead(200, { 'Content-Type': 'text/html' });
+  res.end(`&lt;h1&gt;It works!&lt;/h1&gt;&lt;p&gt;Path: ${req.url}&lt;/p&gt;`);
+});
+server.listen(port, '0.0.0.0', () =&gt; {
+  console.log(`Listening on 0.0.0.0:${port}`);
+});
+EOF
+
+node server.js
+# then in another SSH session or after detaching:
+# curl http://127.0.0.1:8080</code></pre>
+  <div class="warning"><strong>0.0.0.0 vs 127.0.0.1:</strong> <code>127.0.0.1</code> is local-only. <code>0.0.0.0</code> accepts network traffic — required for public access, dangerous without locked security groups.</div>
+  <h3>Keep it running after disconnect</h3>
+  <pre><code>sudo apt install -y tmux
+tmux new -s app
+node server.js
+# Detach: Ctrl+b then d    Reattach: tmux attach -t app</code></pre>
+
+  <h2 id="ports">14. Open the app to the world (ports and security groups)</h2>
+  <table><tr><th>Port</th><th>Service</th><th>Open to Internet?</th></tr><tr><td>22</td><td>SSH</td><td><strong>No</strong> — only your IP or VPN</td></tr><tr><td>80</td><td>HTTP</td><td>Yes, if public website</td></tr><tr><td>443</td><td>HTTPS</td><td>Yes, with certificates later</td></tr><tr><td>8080</td><td>Common app port</td><td>Prefer Nginx on 80 in front</td></tr><tr><td>5432 / 3306</td><td>Postgres / MySQL</td><td><strong>Never</strong> 0.0.0.0/0</td></tr></table>
+  <p>Add inbound rule: EC2 → Instances → select server → Security tab → security group → <strong>Edit inbound rules</strong> → <strong>HTTP, source Anywhere-IPv4</strong> → Save.</p>
+  <div class="diagram"><pre>Browser  --HTTP:80--&gt;  Public IPv4  --NAT--&gt;  EC2 :80
+                           ^
+              Security group must allow 80 from 0.0.0.0/0
+              (SSH rule stays limited to your IP)</pre></div>
+  <p>Then open <code>http://&lt;Public IPv4&gt;</code>. If local curl works but the browser fails: security group, app bind address, then UFW — in that order.</p>
+
+  <h2 id="forward">15. Port forwarding explained</h2>
+  <p>For private services (databases, internal dashboards), tunnel through SSH instead of opening ports to the internet.</p>
+  <h3>Local port forwarding (most common)</h3>
+  <pre><code># On YOUR laptop:
+ssh -i ~/aws-keys/first-server-key.pem \
+    -L 8080:127.0.0.1:8080 \
+    ubuntu@3.94.12.34
+
+# Then browse: http://127.0.0.1:8080</code></pre>
+  <div class="diagram"><pre>Laptop browser: http://127.0.0.1:8080
+        |
+        v
+Local port 8080  ===SSH tunnel===  EC2  --&gt;  app on server 127.0.0.1:8080</pre></div>
+  <h3>Forward to a private database</h3>
+  <pre><code>ssh -i key.pem -L 15432:10.0.3.25:5432 ubuntu@BASTION_PUBLIC_IP
+psql -h 127.0.0.1 -p 15432 -U appuser appdb</code></pre>
+  <h3>Remote forwarding (reverse)</h3>
+  <pre><code>ssh -i key.pem -R 9000:127.0.0.1:3000 ubuntu@SERVER
+# On server: curl http://127.0.0.1:9000 reaches your laptop's :3000</code></pre>
+  <h3>Session Manager alternative</h3>
+  <p>No open port 22, no key on disk — attach instance profile with <code>AmazonSSMManagedInstanceCore</code>, then:</p>
+  <pre><code>aws ssm start-session --target i-0123456789abcdef0</code></pre>
+  <table><tr><th>Method</th><th>Needs public SSH?</th><th>Needs key on disk?</th></tr><tr><td>Direct SSH</td><td>Yes (restricted)</td><td>Yes</td></tr><tr><td>SSH + port forward</td><td>Yes (SSH only)</td><td>Yes</td></tr><tr><td>SSM Session Manager</td><td>No</td><td>No</td></tr></table>
+
+  <h2 id="eip">16. Elastic IPs and stable addresses</h2>
+  <p>A normal public IPv4 changes on stop/start. An <strong>Elastic IP</strong> is static and reassignable.</p>
+  <ol><li>EC2 → <strong>Elastic IPs</strong> → <strong>Allocate Elastic IP address</strong>.</li><li>Select → <strong>Associate</strong> → choose <code>first-server</code>.</li></ol>
+  <div class="warning"><strong>Cost note:</strong> As of Feb 2024 AWS charges for all public IPv4 addresses at a small hourly rate (including attached). Check current pricing; release Elastic IPs you do not use. Long-term: put DNS (Route 53) in front instead of sharing raw IPs.</div>
+
+  <h2 id="storage">17. Storage and snapshots</h2>
+  <div class="diagram"><pre>Instance lifecycle
+   running &lt;----start---- stopped
+      |                    |
+   reboot              EBS volume persists
+      |                    |
+      +---- terminate --&gt; volume deleted (default)</pre></div>
+  <p><strong>Snapshots</strong> are point-in-time EBS backups (EC2 → Volumes → Create snapshot). Take one before big upgrades; delete old experiment snapshots (they cost money). Instance store (local NVMe on some types) is ephemeral — never your only copy of data.</p>
+
+  <h2 id="monitor">18. Monitoring and billing checks while you work</h2>
+  <p>EC2 → <strong>Monitoring</strong> tab: CPU, network, disk, status checks (free basic metrics). CloudWatch is the service behind these.</p>
+  <p><strong>Weekly cost check (2 minutes):</strong> Billing Dashboard → month-to-date; Cost Explorer group by Service; stop forgotten Running instances; release unattached Elastic IPs; prune EBS snapshots.</p>
+
+  <h2 id="deploy">19. Deploying updates to your app</h2>
+  <table><tr><th>Method</th><th>Command sketch</th><th>When</th></tr><tr><td>SSH + nano/vim</td><td><code>nano ~/myapp/server.js</code></td><td>Tiny fixes</td></tr><tr><td>scp</td><td><code>scp -i key.pem app.js ubuntu@IP:~/myapp/</code></td><td>Single file</td></tr><tr><td>rsync</td><td><code>rsync -avz -e "ssh -i key.pem" ./app/ ubuntu@IP:~/myapp/</code></td><td>Project tree</td></tr><tr><td>Git on server</td><td><code>git clone / git pull</code></td><td>Recommended habit</td></tr><tr><td>CI/CD</td><td>GitHub Actions → deploy</td><td>Production (later)</td></tr></table>
+
+  <h2 id="recap">20. What you built: architecture recap</h2>
+  <div class="diagram"><pre>+---------------- AWS Account (12-digit ID) ----------------+
+|  Root (MFA)          IAM admin user (MFA, CLI keys)      |
+|  Budgets: $5 alert   Free-tier email alerts               |
+|                                                           |
+Region (e.g. us-east-1)                                     |
+  +-- Default VPC                                           |
+  |     +-- Public subnet                                   |
+  |           +-- EC2 t3.micro "first-server"               |
+  |                 AMI: Ubuntu 24.04                       |
+  |                 EBS gp3 root volume                     |
+  |                 Public IPv4 (or Elastic IP)             |
+  |                 SG: 22 from YourIP, 80 from Anywhere    |
+  |                 App: Nginx :80  or  Node :8080          |
+  |                 SSH key pair on your laptop             |
+  +-- (unused for now: S3, RDS, ALB, multi-AZ...)</pre></div>
+  <p>You now understand the entire beginner loop: <strong>account → identity → budget → server → key → firewall → app → port → browser.</strong></p>
+
+  <h2 id="stop">21. Stop vs terminate: avoiding surprise bills</h2>
+  <table><tr><th>Action</th><th>Compute billing</th><th>Disk (EBS)</th><th>Public IPv4</th><th>Data</th></tr><tr><td><strong>Running</strong></td><td>Yes</td><td>Yes</td><td>Yes</td><td>Live</td></tr><tr><td><strong>Stop</strong></td><td>No</td><td>Yes</td><td>Released (unless Elastic IP)</td><td>EBS persists</td></tr><tr><td><strong>Reboot</strong></td><td>Yes</td><td>Yes</td><td>Kept</td><td>Kept</td></tr><tr><td><strong>Terminate</strong></td><td>No</td><td>Root deleted (default)</td><td>Released</td><td><strong>Gone</strong> unless AMI/snapshot</td></tr></table>
+  <div class="diagram"><pre>End of day:       Stop instance   -&gt;  pay only for EBS pennies
+End of project:   Terminate + cleanup  -&gt;  pay ~zero</pre></div>
+
+  <h2 id="cleanup">22. Cleanup checklist</h2>
+  <ul class="checklist"><li>EC2 → Instances → Terminate all learning instances.</li><li>Release unassociated Elastic IPs.</li><li>Delete orphaned volumes (state “available”).</li><li>Delete old experiment snapshots.</li><li>Delete key pairs for terminated instances.</li><li>Delete unused security groups (keep default).</li><li>Review IAM users / rotate or delete stale keys.</li><li>Keep the budget — it protects future work.</li><li>Delete local .pem files for instances that no longer exist.</li></ul>
+
+  <h2 id="errors">23. Troubleshooting common errors</h2>
+  <table><tr><th>Symptom</th><th>Likely cause</th><th>Fix</th></tr><tr><td><code>Permission denied (publickey)</code></td><td>Wrong username, wrong .pem, bad permissions</td><td>Verify AMI username; <code>chmod 400</code>; match key pair.</td></tr><tr><td><code>Connection timed out</code></td><td>SG blocks your IP (ISP change); wrong IP; instance stopped</td><td>SG source = <code>curl https://checkip.amazonaws.com</code>; instance Running.</td></tr><tr><td><code>Connection refused</code></td><td>Nothing listening; app on 127.0.0.1</td><td><code>ss -tulpn</code>; bind <code>0.0.0.0</code>; open SG port.</td></tr><tr><td>Browser spins; curl works on server</td><td>SG missing HTTP rule; UFW</td><td>Add inbound rule; <code>sudo ufw status</code>.</td></tr><tr><td><code>Host key verification failed</code></td><td>IP reused; stale known_hosts</td><td><code>ssh-keygen -R 3.94.12.34</code>.</td></tr><tr><td>CLI <code>ExpiredToken</code> / <code>InvalidClientTokenId</code></td><td>Wrong/expired keys</td><td><code>aws configure</code> again; IAM access keys.</td></tr><tr><td><code>AccessDenied</code> from CLI</td><td>Wrong identity / missing policy</td><td><code>aws sts get-caller-identity</code>; see IAM guide.</td></tr><tr><td>Locked out after UFW enable</td><td>UFW blocked SSH</td><td>Instance Connect / rebuild; allow OpenSSH before enabling UFW.</td></tr></table>
+  <h3>Three diagnostic commands (memorize)</h3>
+  <pre><code># On your laptop
+aws sts get-caller-identity
+curl https://checkip.amazonaws.com
+
+# On the server
+ss -tulpn</code></pre>
+
+  <h2 id="costs">24. What is free and what is not</h2>
+  <p>Verify current terms at <strong>https://aws.amazon.com/free/</strong>.</p>
+  <table><tr><th>Typically free-tier (12 months)</th><th>Not free / easy to forget</th></tr><tr><td>750 hrs/month t2.micro/t3.micro (one instance)</td><td>A second running instance doubles hours</td></tr><tr><td>30 GB EBS storage</td><td>Snapshots beyond free limits</td></tr><tr><td>Limited S3 storage + requests</td><td>Large S3 data + transfer</td></tr><tr><td>Limited data transfer out</td><td>Large downloads, backups</td></tr><tr><td>—</td><td>All public IPv4 / Elastic IP (small hourly)</td></tr><tr><td>—</td><td>ELB, NAT Gateway (real $/hr)</td></tr><tr><td>—</td><td>RDS, Route 53, paid AMIs</td></tr></table>
+  <div class="diagram"><pre>Common beginner bill sources
+  EC2 left running            ████████████
+  EBS volumes/snapshots       ████
+  Public IPv4 charges         ██
+  NAT/ALB (if you "advance")  ██████████</pre></div>
+  <p><strong>Rule of thumb:</strong> if you did not click “launch” on it this week, it should not be <code>Running</code>.</p>
+
+  <h2 id="next">25. Where to go next</h2>
+  <table><tr><th>Topic</th><th>Guide</th></tr><tr><td>EC2 in depth</td><td><a href="../EC2-Instance/amazon-ec2-complete-guide.md">EC2 Instance guide</a></td></tr><tr><td>IAM policies, roles, SSO</td><td><a href="../IAM/amazon-iam-complete-guide.md">IAM guide</a></td></tr><tr><td>VPC, S3, RDS, HTTPS</td><td>Add as next topics in this repo</td></tr></table>
+  <div class="diagram"><pre>This guide (account + first server + first app)
+        |
+        v
+EC2 guide (production patterns, Session Manager)
+        |
+        +--&gt; VPC guide --&gt; ALB/ASG
+        +--&gt; IAM guide (roles, boundaries)
+        +--&gt; S3 + RDS + HTTPS guides
+        |
+        v
+CI/CD to AWS  +  backups/alerts</pre></div>
+
+  <h2 id="checklist">26. Final beginner checklist</h2>
+  <ul class="checklist"><li>AWS account created; card verified; root password in a password manager.</li><li>MFA enabled on root.</li><li>Budget + free-tier email alerts enabled; test that emails arrive.</li><li>IAM admin user with MFA + CLI access keys stored safely.</li><li>AWS CLI installed; <code>aws sts get-caller-identity</code> shows the IAM user.</li><li>Region chosen and consistent.</li><li>EC2 launched: free-tier type, key pair (<code>chmod 400</code>), SG = SSH from My IP.</li><li>SSH works; packages updated.</li><li>Web app runs bound to <code>0.0.0.0</code>.</li><li>SG allows HTTP as needed; page loads via public IP.</li><li>Understood port forwarding for private services.</li><li>Instance stopped at end of day; terminate + cleanup when done.</li><li>Billing dashboard checked after first day of experiments.</li></ul>
+  <div class="note"><strong>The whole AWS journey in one sentence:</strong> prove who you are (IAM), put a machine where users can reach it (network + compute), open only the necessary doors (security groups), watch the money (budgets), and clean up like someone else is paying — because future-you is.</div>
+  <footer><hr><p><small>AWS from-zero-to-deployed practical reference. Verify current free-tier limits, console layouts, IPv4 pricing, and service quotas in the official AWS documentation before relying on them.</small></p></footer>
+</main>
+</body>
+</html>

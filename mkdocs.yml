@@ -29,6 +29,9 @@ nav:
   - Home: index.md
   - AWS:
       - Overview: AWS/index.md
+      - Getting Started:
+          - Overview: AWS/Getting-Started/index.md
+          - Zero to Deployed Guide: AWS/Getting-Started/aws-from-zero-to-deployed.md
       - EC2 Instance:
           - Overview: AWS/EC2-Instance/index.md
           - Complete Guide: AWS/EC2-Instance/amazon-ec2-complete-guide.md

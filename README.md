@@ -16,6 +16,10 @@ Learning-Materieals/
 │   ├── index.md
 │   └── AWS/
 │       ├── index.md
+│       ├── Getting-Started/
+│       │   ├── index.md
+│       │   ├── aws-from-zero-to-deployed.md
+│       │   └── aws-from-zero-to-deployed.html
 │       ├── EC2-Instance/
 │       │   ├── index.md
 │       │   ├── amazon-ec2-complete-guide.md
@@ -29,7 +33,7 @@ Learning-Materieals/
 └── .github/workflows/deploy.yml
 ```
 
-Start with [AWS → EC2 Instance](docs/AWS/EC2-Instance/index.md).
+Start with [AWS → Getting Started](docs/AWS/Getting-Started/index.md) if you are new to AWS.
 
 ## Local preview
 
